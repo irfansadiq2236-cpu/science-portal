@@ -1,6 +1,6 @@
+import datetime
 import io
 import zipfile
-import datetime
 import openpyxl
 import pandas as pd
 import streamlit as st
@@ -9,6 +9,46 @@ st.set_page_config(
     page_title="GCSE Science Progress & Intervention Portal", layout="wide"
 )
 
+# --- SIMPLE SECURE LOGIN FUNCTION ---
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        # You can change your username and password right here:
+        if (
+            st.session_state["username"] == "admin"
+            and st.session_state["password"] == "science123"
+        ):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password
+            del st.session_state["username"]
+        else:
+            st.session_state["password_correct"] = False
+
+    # First run, or password incorrect
+    if "password_correct" not in st.session_state:
+        st.subheader("🔐 Secure Portal Login")
+        st.text_input("Username", key="username")
+        st.text_input("Password", type="password", key="password")
+        st.button("Log in", on_click=password_entered)
+        return False
+    elif not st.session_state["password_correct"]:
+        st.subheader("🔐 Secure Portal Login")
+        st.text_input("Username", key="username")
+        st.text_input("Password", type="password", key="password")
+        st.button("Log in", on_click=password_entered)
+        st.error("😕 User ID or password incorrect")
+        return False
+    else:
+        # Password correct.
+        return True
+
+# Stop the app right here if the user is not logged in yet
+if not check_password():
+    st.stop()
+
+# --- MAIN APP START ---
 # Custom CSS for clean text wrapping and responsive layout
 st.markdown("""
     <style>
