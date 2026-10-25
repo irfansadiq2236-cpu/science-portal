@@ -12,21 +12,17 @@ st.set_page_config(
 # --- SIMPLE SECURE LOGIN FUNCTION ---
 def check_password():
     """Returns `True` if the user had the correct password."""
-
     def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        # You can change your username and password right here:
         if (
             st.session_state["username"] == "admin"
             and st.session_state["password"] == "science123"
         ):
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # don't store password
+            del st.session_state["password"]
             del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
 
-    # First run, or password incorrect
     if "password_correct" not in st.session_state:
         st.subheader("🔐 Secure Portal Login")
         st.text_input("Username", key="username")
@@ -41,15 +37,12 @@ def check_password():
         st.error("😕 User ID or password incorrect")
         return False
     else:
-        # Password correct.
         return True
 
-# Stop the app right here if the user is not logged in yet
 if not check_password():
     st.stop()
 
 # --- MAIN APP START ---
-# Custom CSS for clean text wrapping and responsive layout
 st.markdown("""
     <style>
     .metric-container, .stMetric, div[data-testid="stMetricValue"], div[data-testid="stMetricLabel"] {
@@ -96,37 +89,18 @@ except Exception as e:
     st.error(f"Error loading Excel file: {e}")
     st.stop()
 
-# Helper topic groupings with specification tags
 bio_cols = [
-    "B1: Cells",
-    "B2: Organs",
-    "B3: Infection",
-    "B4: Bioenerg",
-    "B5: Homeo",
-    "B6: Inherit",
-    "B7: Ecology",
+    "B1: Cells", "B2: Organs", "B3: Infection", "B4: Bioenerg",
+    "B5: Homeo", "B6: Inherit", "B7: Ecology"
 ]
 chem_cols = [
-    "C1: Atoms",
-    "C2: Bonding",
-    "C3: Quant Chem",
-    "C4: Chem Change",
-    "C5: Energy",
-    "C6: Rates",
-    "C7: Organic",
-    "C8: Analysis",
-    "C9: Atmos",
-    "C10: Resources",
+    "C1: Atoms", "C2: Bonding", "C3: Quant Chem", "C4: Chem Change",
+    "C5: Energy", "C6: Rates", "C7: Organic", "C8: Analysis",
+    "C9: Atmos", "C10: Resources"
 ]
 phys_cols = [
-    "P1: Energy",
-    "P2: Electric",
-    "P3: Particle",
-    "P4: Atomic",
-    "P5: Forces",
-    "P6: Waves",
-    "P7: Magnet",
-    "P8: Space*",
+    "P1: Energy", "P2: Electric", "P3: Particle", "P4: Atomic",
+    "P5: Forces", "P6: Waves", "P7: Magnet", "P8: Space*"
 ]
 all_topics = bio_cols + chem_cols + phys_cols
 
@@ -163,6 +137,13 @@ def get_grade_from_mark_70(tier, mark_out_of_70, df_gb_ref):
             curr_g = g
             break
     return curr_g
+
+
+def clean_grade_scale(raw_val, tier_str, df_gb_ref):
+    val = safe_int(raw_val, 2)
+    if val > 9:
+        return get_grade_from_mark_70(tier_str, float(val), df_gb_ref)
+    return max(1, min(9, val))
 
 
 def get_grade_gap(tier, mark_out_of_70):
@@ -240,23 +221,20 @@ def compute_student_metrics(s_row, all_topics_list, df_gb_ref, df_rp_ref):
         calc_cwg = get_grade_from_mark_70(tier_str, calc_avg_70, df_gb_ref)
     else:
         stored_base = get_first_valid(s_row, ["Baseline Grade", "Baseline"], 2)
-        calc_cwg = safe_int(stored_base)
+        calc_cwg = clean_grade_scale(stored_base, tier_str, df_gb_ref)
 
-    raw_pending = get_first_valid(s_row, ["Outstanding Practicals", "Pending RPs"], -1)
-    if raw_pending == -1:
-        s_name = str(s_row["Student Name"])
-        rp_col = None
-        for c in df_rp_ref.columns:
-            if s_name.lower() in c.lower():
-                rp_col = c
-                break
-        if rp_col:
-            comp = (df_rp_ref[rp_col].astype(str).str.strip().str.lower() == "completed").sum()
-            calc_pending = len(df_rp_ref) - comp
-        else:
-            calc_pending = 0
+    s_name = str(s_row["Student Name"])
+    rp_col = None
+    for c in df_rp_ref.columns:
+        if s_name.strip().lower() in c.strip().lower():
+            rp_col = c
+            break
+            
+    if rp_col:
+        completed = (df_rp_ref[rp_col].astype(str).str.strip().str.lower() == "completed").sum()
+        calc_pending = len(df_rp_ref) - completed
     else:
-        calc_pending = safe_int(raw_pending)
+        calc_pending = len(df_rp_ref)
 
     return calc_avg_70, calc_avg_pct, calc_cwg, calc_pending
 
@@ -277,7 +255,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 with tab1:
     st.header("Individual Student Search & Report Export (/70 Mock Scale)")
     search_query = st.selectbox(
-        "Choose Student:", df_st["Student Name"].tolist()
+        "Choose Student:", df_st["Student Name"].tolist(), key="main_search_student"
     )
     s_info = df_st[df_st["Student Name"] == search_query].iloc[0]
 
@@ -312,25 +290,29 @@ with tab1:
         wb_p_view = openpyxl.load_workbook(EXCEL_FILE)
         if "Student Profiles" in wb_p_view.sheetnames:
             ws_p_view = wb_p_view["Student Profiles"]
+            latest_prof = None
             for row in ws_p_view.iter_rows(min_row=2, values_only=True):
                 if row[0] and str(row[0]).strip().lower() == str(s_info["Student Name"]).strip().lower():
-                    with st.expander("ℹ️ Quick-View Contact & Medical / Support Info"):
-                        q_c1, q_c2 = st.columns(2)
-                        with q_c1:
-                            st.write(f"**Parent/Guardian:** {row[2] or 'N/A'}")
-                            st.write(f"**Parent Email:** {row[3] or 'N/A'}")
-                            st.write(f"**Primary Phone:** {row[4] or 'N/A'}")
-                        with q_c2:
-                            st.write(f"**Secondary Contact:** {row[5] or 'N/A'} ({row[6] or 'Relation N/A'}) - {row[7] or 'No Phone'}")
-                            st.write(f"**Allergies/Medical:** {row[8] or 'None'}")
-                            st.write(f"**Support Needs (SEND):** {row[9] or 'None'}")
-                    break
+                    latest_prof = row
+            if latest_prof:
+                with st.expander("ℹ️ Quick-View Contact & Medical / Support Info"):
+                    q_c1, q_c2 = st.columns(2)
+                    with q_c1:
+                        st.write(f"**Parent/Guardian:** {latest_prof[2] or 'N/A'}")
+                        st.write(f"**Parent Email:** {latest_prof[3] or 'N/A'}")
+                        st.write(f"**Primary Phone:** {latest_prof[4] or 'N/A'}")
+                    with q_c2:
+                        st.write(f"**Secondary Contact:** {latest_prof[5] or 'N/A'} ({latest_prof[6] or 'Relation N/A'}) - {latest_prof[7] or 'No Phone'}")
+                        st.write(f"**Allergies/Medical:** {latest_prof[8] or 'None'}")
+                        st.write(f"**Support Needs (SEND):** {latest_prof[9] or 'None'}")
     except:
         pass
 
-    # Assessment Logger
-    with st.expander("📝 Enter / Log Assessments (Baseline, Mock Paper 1, Mock Paper 2 & Topic Tests)"):
+    # Assessment & Baseline Raw Marks Logger
+    with st.expander("📝 Enter / Log Assessments & Baseline Raw Marks"):
         with st.form(f"assessment_form_{s_info['Student ID']}"):
+            st.write(f"**Logging for:** {s_info['Student Name']}")
+            
             assessment_type = st.selectbox(
                 "Assessment Type:", 
                 ["Baseline Test", "Mock Paper 1", "Mock Paper 2", "End-of-Topic Test"]
@@ -354,6 +336,24 @@ with tab1:
                 try:
                     wb_a = openpyxl.load_workbook(EXCEL_FILE)
                     if assessment_type == "Baseline Test":
+                        # Also save raw baseline breakdown into an Assessment History entry so it's always viewable
+                        if "Assessment History" not in wb_a.sheetnames:
+                            ws_hist = wb_a.create_sheet("Assessment History")
+                            ws_hist.append(["Student ID", "Student Name", "Assessment Type", "Date", "Biology (/23)", "Chemistry (/23)", "Physics (/24)", "Total (/70)"])
+                        else:
+                            ws_hist = wb_a["Assessment History"]
+                        
+                        ws_hist.append([
+                            s_info["Student ID"],
+                            s_info["Student Name"],
+                            "Baseline Test",
+                            datetime.date.today().strftime("%Y-%m-%d"),
+                            bio_score,
+                            chem_score,
+                            phys_score,
+                            total_raw
+                        ])
+
                         ws_a = wb_a["Student Tracker"]
                         for r_idx in range(5, ws_a.max_row + 1):
                             if str(ws_a.cell(row=r_idx, column=1).value).strip() == str(s_info["Student ID"]).strip():
@@ -404,10 +404,14 @@ with tab1:
                 except Exception as ex:
                     st.error(f"Error saving assessment: {ex}")
 
-    # Retrieve metrics
-    stored_base_grade = safe_int(get_first_valid(s_info, ["Baseline Grade", "Baseline"], 2))
+    # Retrieve and clean metrics
     current_tier_str = str(s_info.get("Tier (H/F)", "Foundation (F)"))
-    pred_val = get_first_valid(s_info, ["Predicted Grade", "Predicted", "Target Grade"], 0)
+    raw_base = get_first_valid(s_info, ["Baseline Grade", "Baseline"], 2)
+    stored_base_grade = clean_grade_scale(raw_base, current_tier_str, df_gb)
+    
+    raw_pred = get_first_valid(s_info, ["Predicted Grade", "Predicted", "Target Grade"], 0)
+    pred_val = clean_grade_scale(raw_pred, current_tier_str, df_gb)
+
     calc_70, calc_pct, cwg_val, pending_rps_val = compute_student_metrics(s_info, all_topics, df_gb, df_rp)
     
     avg_mark_70 = float(calc_70)
@@ -417,26 +421,28 @@ with tab1:
     eval_pct_for_target = avg_pct if avg_pct > 0 else (eval_mark_for_target / 70.0) * 100
 
     p1, p2, p3, p4, p5 = st.columns(5)
-    p1.metric("Baseline Grade", f"Grade {stored_base_grade}")
+    p1.metric("Baseline Grade", f"{stored_base_grade}")
     p2.metric(
         "Current Working (CWG)",
-        safe_int(cwg_val),
+        f"{safe_int(cwg_val)}",
         delta=safe_int(cwg_val) - stored_base_grade,
     )
-    p3.metric("Predicted", safe_int(pred_val))
+    p3.metric("Predicted", f"{pred_val}")
     p4.metric("Mock Score /70", f"{avg_mark_70:.1f} / 70", f"{avg_pct:.1f}%")
     p5.metric("Pending RPs", safe_int(pending_rps_val))
 
-    # Assessment History Dropdown
+    # Assessment & Baseline Raw Marks History Dropdown
     try:
         wb_chk = openpyxl.load_workbook(EXCEL_FILE)
         if "Assessment History" in wb_chk.sheetnames:
             df_hist_check = pd.read_excel(EXCEL_FILE, sheet_name="Assessment History", dtype=str)
-            student_history = df_hist_check[df_hist_check["Student ID"].astype(str).str.strip() == str(s_info["Student ID"]).strip()]
+            student_history = df_hist_check[
+                df_hist_check["Student ID"].astype(str).str.strip().str.lower() == str(s_info["Student ID"]).strip().lower()
+            ]
             if not student_history.empty:
-                with st.expander("📂 View Previous Mock & Assessment Results History"):
+                with st.expander("📂 View Previous Baseline & Assessment Raw Marks Breakdown"):
                     assessment_options = [f"{row['Assessment Type']} ({row['Date']}) - Total: {row['Total (/70)']}/70" for _, row in student_history.iterrows()]
-                    selected_past_assessment = st.selectbox("Select Past Assessment to View Breakdown:", assessment_options)
+                    selected_past_assessment = st.selectbox("Select Assessment to View Breakdown:", assessment_options, key=f"hist_{s_info['Student ID']}")
                     
                     selected_idx = assessment_options.index(selected_past_assessment)
                     record = student_history.iloc[selected_idx]
@@ -481,6 +487,7 @@ with tab1:
         max_value=70.0,
         value=round(eval_mark_for_target, 1),
         step=0.5,
+        key=f"sim_{s_info['Student ID']}"
     )
     sim_grade, sim_next_grade, sim_gap = get_grade_gap(current_tier_str, simulated_mark)
     sim_col1, sim_col2 = st.columns(2)
@@ -495,7 +502,7 @@ with tab1:
     st.divider()
 
     st.markdown("### 📈 Paper Averages & Maths Skills Breakdown")
-    diag_row = df_diag[df_diag["Student ID"] == s_info["Student ID"]]
+    diag_row = df_diag[df_diag["Student ID"].astype(str).str.strip().str.lower() == str(s_info["Student ID"]).strip().lower()]
 
     if not diag_row.empty:
         d_row = diag_row.iloc[0]
@@ -535,7 +542,7 @@ with tab1:
     st.markdown("#### 🧠 Assessment Performance Insights:")
     st.success(f"💪 **Strongest Discipline:** **{strongest_disc}** is the highest scoring area.")
     st.warning(f"⚠️ **Development Area:** **{weakest_disc}** represents the primary development discipline requiring targeted revision.")
-    st.info(f"📋 **Grade Summary:** Baseline assessment places student at **Grade {stored_base_grade}**. Current Working Grade stands at **Grade {cwg_val}** under **{current_tier_str}**.")
+    st.info(f"📋 **Grade Summary:** Baseline assessment places student at **{stored_base_grade}**. Current Working Grade stands at **{cwg_val}** under **{current_tier_str}**.")
 
     st.divider()
 
@@ -620,7 +627,7 @@ with tab1:
 
     rp_col = None
     for c in df_rp.columns:
-        if s_info["Student Name"].lower() in c.lower():
+        if s_info["Student Name"].strip().lower() in c.strip().lower():
             rp_col = c
             break
 
@@ -666,7 +673,7 @@ with tab1:
         wb_check = openpyxl.load_workbook(EXCEL_FILE)
         if "Assessment History" in wb_check.sheetnames:
             df_hist = pd.read_excel(EXCEL_FILE, sheet_name="Assessment History", dtype=str)
-            student_h = df_hist[df_hist["Student ID"].astype(str).str.strip() == str(s_info["Student ID"]).strip()]
+            student_h = df_hist[df_hist["Student ID"].astype(str).str.strip().str.lower() == str(s_info["Student ID"]).strip().lower()]
             if not student_h.empty:
                 latest = student_h.iloc[-1]
                 latest_mock_details = f"Latest Assessment ({latest['Assessment Type']} on {latest['Date']}): Total {latest['Total (/70)']}/70 [Biology: {latest['Biology (/23)']}/23, Chemistry: {latest['Chemistry (/23)']}/23, Physics: {latest['Physics (/24)']}/24]"
@@ -681,8 +688,8 @@ I am writing to share a progress update regarding {s_info['Student Name']}'s GCS
 
 Here is a summary of their academic standing, including their recent assessment result:
 - Entry Tier: {tier_label}
-- Baseline Grade: Grade {stored_base_grade}
-- Current Working Grade (CWG): {safe_int(cwg_val)} (Target/Predicted Grade: {safe_int(pred_val)})
+- Baseline Grade: {stored_base_grade}
+- Current Working Grade (CWG): {safe_int(cwg_val)} (Target/Predicted Grade: {pred_val})
 - {latest_mock_details}
 - Distance to Grade 5: {distance_text}
 - Outstanding Required Practicals: {safe_int(pending_rps_val)}
@@ -701,7 +708,7 @@ Science Department
 """
 
     whatsapp_draft = f"""Hi, here is a quick progress update for {s_info['Student Name']} in GCSE Science:
-- CWG: Grade {safe_int(cwg_val)} (Target: Grade {safe_int(pred_val)})
+- CWG: {safe_int(cwg_val)} (Target: {pred_val})
 - {latest_mock_details}
 - Distance to Grade 5: {distance_text}
 - Fees: {"Paid Up-to-Date" if fee_emoji == "🟢" else f"Outstanding (£{fee_due_amt:.2f})"}
@@ -710,9 +717,9 @@ Please reach out if you have any questions!
 
     em_col1, em_col2 = st.columns(2)
     with em_col1:
-        st.text_area("Copy Email Text:", value=email_draft, height=220)
+        st.text_area("Copy Email Text:", value=email_draft, height=220, key=f"em_{s_info['Student ID']}")
     with em_col2:
-        st.text_area("Copy WhatsApp / SMS Text:", value=whatsapp_draft, height=220)
+        st.text_area("Copy WhatsApp / SMS Text:", value=whatsapp_draft, height=220, key=f"wa_{s_info['Student ID']}")
 
     st.divider()
 
@@ -725,9 +732,9 @@ Programme:    {s_info.get('Study Programme', 'Science')} ({s_info.get('Exam Boar
 Tier:         {tier_label}
 
 PERFORMANCE SUMMARY:
-- Baseline Grade: Grade {stored_base_grade}
+- Baseline Grade: {stored_base_grade}
 - Current Working Grade (CWG): {safe_int(cwg_val)}
-- Predicted Grade: {safe_int(pred_val)}
+- Predicted Grade: {pred_val}
 - {latest_mock_details}
 - Distance to Grade 5: {distance_text}
 - Pending Practicals: {safe_int(pending_rps_val)}
@@ -742,6 +749,7 @@ ACTION & FOCUS PRIORITY:
         data=report_text,
         file_name=f"{s_info['Student Name']}_Science_Report.txt",
         mime="text/plain",
+        key=f"dl_{s_info['Student ID']}"
     )
 
 # --- TAB 2: WEEKLY TIMETABLE, CLASS REGISTER, ATTENDANCE SEARCH & MANAGEMENT ---
@@ -762,7 +770,6 @@ with tab2:
     except:
         pass
 
-    # Manage / Create Individual Classes Form
     with st.expander("👥 Create or Manage Individual Classes / Groups"):
         with st.form("save_class_form"):
             c_name_input = st.text_input("New Class / Group Name:", placeholder="e.g. 11A4 Friday 16:00-17:00")
@@ -796,9 +803,8 @@ with tab2:
                     except Exception as ex:
                         st.error(f"Error saving class: {ex}")
 
-    # Take Register for Individual Class
     class_group_choices = list(saved_classes.keys()) if saved_classes else ["GCSE Science Group A"]
-    selected_class_load = st.selectbox("⚡ Choose Class to Take Register For:", class_group_choices)
+    selected_class_load = st.selectbox("⚡ Choose Class to Take Register For:", class_group_choices, key="reg_class_choice")
     
     class_roster_students = [s.strip() for s in saved_classes.get(selected_class_load, all_students_list[:3]) if s.strip() in all_students_list]
     if not class_roster_students:
@@ -848,15 +854,8 @@ with tab2:
                     reason_note = student_absence_notes[s_name].strip()
                     full_note = f"Reason: {reason_note} | General: {class_notes}" if reason_note else class_notes
                     ws_reg.append([
-                        formatted_date, 
-                        day_name, 
-                        time_choice, 
-                        f"{selected_class_load} ({s_name})", 
-                        ks_choice, 
-                        stat, 
-                        topic_studied, 
-                        homework_task,
-                        full_note
+                        formatted_date, day_name, time_choice, f"{selected_class_load} ({s_name})", 
+                        ks_choice, stat, topic_studied, homework_task, full_note
                     ])
                     
                 wb.save(EXCEL_FILE)
@@ -879,28 +878,28 @@ with tab2:
             if len(df_register.columns) >= len(expected_cols):
                 df_register.columns = expected_cols[:len(df_register.columns)]
 
-            search_type = st.radio("Search By:", ["All Records", "Specific Class", "Specific Student"], horizontal=True)
+            search_type = st.radio("Search By:", ["All Records", "Specific Class", "Specific Student"], horizontal=True, key="reg_search_radio")
             
             filtered_reg = df_register.copy()
             if search_type == "Specific Class" and saved_classes:
-                sel_search_class = st.selectbox("Select Class to Search:", list(saved_classes.keys()))
+                sel_search_class = st.selectbox("Select Class to Search:", list(saved_classes.keys()), key="reg_search_class_sel")
                 filtered_reg = filtered_reg[filtered_reg["Student / Class Name"].str.contains(sel_search_class, case=False, na=False)]
             elif search_type == "Specific Student":
-                sel_search_stud = st.selectbox("Select Student to Search:", all_students_list)
+                sel_search_stud = st.selectbox("Select Student to Search:", all_students_list, key="reg_search_stud_sel")
                 filtered_reg = filtered_reg[filtered_reg["Student / Class Name"].str.contains(sel_search_stud, case=False, na=False)]
 
             if not filtered_reg.empty:
                 st.dataframe(filtered_reg, use_container_width=True, hide_index=True)
                 
-                # Delete / Manage section
                 st.markdown("### 🗑️ Delete or Modify Register Records")
                 row_indices_to_delete = st.multiselect(
                     "Select row index/indices to delete from register log:",
                     options=filtered_reg.index.tolist(),
-                    format_func=lambda x: f"Row {x}: {filtered_reg.loc[x].get('Student / Class Name', 'Record')} on {filtered_reg.loc[x].get('Date', 'N/A')}"
+                    format_func=lambda x: f"Row {x}: {filtered_reg.loc[x].get('Student / Class Name', 'Record')} on {filtered_reg.loc[x].get('Date', 'N/A')}",
+                    key="reg_del_multiselect"
                 )
                 
-                if st.button("🗑️ Delete Selected Register Rows"):
+                if st.button("🗑️ Delete Selected Register Rows", key="reg_del_btn"):
                     if row_indices_to_delete:
                         try:
                             wb = openpyxl.load_workbook(EXCEL_FILE)
@@ -918,7 +917,6 @@ with tab2:
                         st.warning("Please select at least one row to delete.")
             else:
                 st.info("No register records found matching your search criteria.")
-
     except:
         st.info("No register records found yet.")
 
@@ -952,7 +950,7 @@ with tab2:
 # --- TAB 3: STUDENT PROFILES & PASTORAL ---
 with tab3:
     st.header("🗂️ Student Pastoral Profiles, Contacts & Medical/Support Needs")
-    st.info("Manage parent/guardian names, emails, phone numbers, secondary contacts and relationships, medical conditions, and additional learning support needs.")
+    st.info("Manage parent/guardian details, emergency contacts, medical conditions, and SEND needs. All profile updates are saved into a searchable history log.")
 
     profiles_data = {}
     try:
@@ -975,7 +973,7 @@ with tab3:
     except:
         pass
 
-    selected_prof_student = st.selectbox("Select Student to View / Update Profile:", all_students_list, key="prof_select_box")
+    selected_prof_student = st.selectbox("Select Student to View / Update Profile:", all_students_list, key="prof_select_box_tab3")
     
     existing_p = profiles_data.get(selected_prof_student.strip().lower(), {
         "Parent Name": "", "Parent Email": "", "Primary Phone": "", 
@@ -1001,17 +999,17 @@ with tab3:
         if submit_profile:
             try:
                 wb = openpyxl.load_workbook(EXCEL_FILE)
-                if "Student Profiles" not in wb.sheetnames:
-                    ws_prof = wb.create_sheet("Student Profiles")
-                    ws_prof.append(["StudentName", "StudentID", "ParentName", "ParentEmail", "PrimaryPhone", "SecondaryName", "SecondaryRelation", "SecondaryPhone", "AllergiesMedical", "SupportNeeds"])
-                else:
-                    ws_prof = wb["Student Profiles"]
-
                 s_id_match = ""
                 for _, s_r in df_st.iterrows():
                     if s_r["Student Name"].strip().lower() == selected_prof_student.strip().lower():
                         s_id_match = s_r["Student ID"]
                         break
+
+                if "Student Profiles" not in wb.sheetnames:
+                    ws_prof = wb.create_sheet("Student Profiles")
+                    ws_prof.append(["StudentName", "StudentID", "ParentName", "ParentEmail", "PrimaryPhone", "SecondaryName", "SecondaryRelation", "SecondaryPhone", "AllergiesMedical", "SupportNeeds"])
+                else:
+                    ws_prof = wb["Student Profiles"]
 
                 updated = False
                 for r_idx, row in enumerate(ws_prof.iter_rows(min_row=2, values_only=True), start=2):
@@ -1030,27 +1028,53 @@ with tab3:
 
                 if not updated:
                     ws_prof.append([
-                        selected_prof_student,
-                        s_id_match,
-                        prof_parent_name,
-                        prof_email,
-                        prof_phone,
-                        prof_sec_name,
-                        prof_sec_rel,
-                        prof_sec_phone,
-                        prof_allergies,
-                        prof_support
+                        selected_prof_student, s_id_match, prof_parent_name, prof_email, 
+                        prof_phone, prof_sec_name, prof_sec_rel, prof_sec_phone, prof_allergies, prof_support
                     ])
 
+                if "Pastoral History" not in wb.sheetnames:
+                    ws_hist = wb.create_sheet("Pastoral History")
+                    ws_hist.append(["Student ID", "Student Name", "Update Date", "Parent Name", "Parent Email", "Primary Phone", "Secondary Contact", "Allergies/Medical", "Support Needs"])
+                else:
+                    ws_hist = wb["Pastoral History"]
+
+                ws_hist.append([
+                    s_id_match,
+                    selected_prof_student,
+                    datetime.date.today().strftime("%Y-%m-%d"),
+                    prof_parent_name,
+                    prof_email,
+                    prof_phone,
+                    f"{prof_sec_name} ({prof_sec_rel}) - {prof_sec_phone}",
+                    prof_allergies,
+                    prof_support
+                ])
+
                 wb.save(EXCEL_FILE)
-                st.success(f"Profile updated successfully for **{selected_prof_student}**!")
+                st.success(f"Profile and history updated successfully for **{selected_prof_student}**!")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as ex:
                 st.error(f"Error saving profile: {ex}")
 
     st.divider()
-    st.subheader("🔍 View All Student Pastoral Profiles")
+    st.subheader("📂 View Pastoral Profile Update History")
+    try:
+        xls_p_hist = pd.ExcelFile(EXCEL_FILE)
+        if "Pastoral History" in xls_p_hist.sheet_names:
+            df_p_hist = pd.read_excel(EXCEL_FILE, sheet_name="Pastoral History", dtype=str)
+            student_p_history = df_p_hist[df_p_hist["Student ID"].astype(str).str.strip().str.lower() == df_st[df_st["Student Name"] == selected_prof_student]["Student ID"].values[0].lower()]
+            if not student_p_history.empty:
+                st.dataframe(student_p_history, use_container_width=True, hide_index=True)
+            else:
+                st.info("No past profile history logs found for this student yet.")
+        else:
+            st.info("No Pastoral History sheet created yet. Submit an update using the form above to start recording history.")
+    except:
+        st.info("No pastoral history available.")
+
+    st.divider()
+    st.subheader("🔍 View All Current Student Pastoral Profiles")
 
     if profiles_data:
         prof_list_display = []
@@ -1067,54 +1091,39 @@ with tab3:
             })
         st.dataframe(pd.DataFrame(prof_list_display), use_container_width=True, hide_index=True)
     else:
-        st.info("No student pastoral profiles added yet. Use the form above to add contact details, medical info, and support needs.")
+        st.info("No student pastoral profiles added yet.")
 
 # --- TAB 4: LIVE PRACTICAL LOGGER ---
 with tab4:
     st.header("Interactive Practical Logger")
-    sel_student_name = st.selectbox(
-        "Select Student:", df_st["Student Name"].tolist(), key="pract_sel"
-    )
+    sel_student_name = st.selectbox("Select Student:", df_st["Student Name"].tolist(), key="pract_sel_tab4")
 
     rp_col = None
     for c in df_rp.columns:
-        if sel_student_name.lower() in c.lower():
+        if sel_student_name.strip().lower() in c.strip().lower():
             rp_col = c
             break
 
     if rp_col:
-        student_rp_df = df_rp[
-            ["RP #", "Subject", "Practical Title", "Paper", rp_col]
-        ].copy()
+        student_rp_df = df_rp[["RP #", "Subject", "Practical Title", "Paper", rp_col]].copy()
         student_rp_df.rename(columns={rp_col: "Status"}, inplace=True)
-
-        st.write(f"Editing practical status for **{sel_student_name}**:")
         edited_df = st.data_editor(
             student_rp_df,
             column_config={
-                "Status": st.column_config.SelectboxColumn(
-                    "Status",
-                    options=["Completed", "Outstanding"],
-                    required=True,
-                )
+                "Status": st.column_config.SelectboxColumn("Status", options=["Completed", "Outstanding"], required=True)
             },
             hide_index=True,
             use_container_width=True,
+            key=f"editor_{sel_student_name}"
         )
-
         comp_count = (edited_df["Status"] == "Completed").sum()
         out_count = (edited_df["Status"] == "Outstanding").sum()
-        st.success(
-            f"Practicals Completed: {comp_count} | Practicals Outstanding: {out_count}"
-        )
+        st.success(f"Practicals Completed: {comp_count} | Practicals Outstanding: {out_count}")
 
 # --- TAB 5: STUDENT FEES MANAGEMENT ---
 with tab5:
     st.header("💰 Student Fees & Tuition Payments Management")
-    st.info("Track tuition fees, view balances by class group or individual student, and record payments.")
-
     class_group_options = ["All Classes"] + list(saved_classes.keys()) + ["GCSE Science Group A"]
-
     fees_data = []
     try:
         wb_fees = openpyxl.load_workbook(EXCEL_FILE)
@@ -1130,23 +1139,22 @@ with tab5:
                         "Payment Status": str(row[4]),
                         "Notes": str(row[5]) if len(row) > 5 and row[5] is not None else ""
                     })
-    except Exception as ex:
+    except:
         pass
-
     df_fees = pd.DataFrame(fees_data)
 
     with st.form("fee_payment_form"):
         st.subheader("➕ Record or Update Student Fee / Payment")
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
-            fee_class = st.selectbox("Class Group:", list(saved_classes.keys()) if saved_classes else ["GCSE Science Group A"])
-            fee_student = st.selectbox("Student Name:", all_students_list, key="fee_stud_sel")
+            fee_class = st.selectbox("Class Group:", list(saved_classes.keys()) if saved_classes else ["GCSE Science Group A"], key="fee_class_input")
+            fee_student = st.selectbox("Student Name:", all_students_list, key="fee_stud_sel_form")
         with f_col2:
-            fee_date = st.date_input("Due / Payment Date:", value=datetime.date.today())
-            fee_amount = st.number_input("Amount (£):", min_value=0.0, value=35.0, step=5.0)
+            fee_date = st.date_input("Due / Payment Date:", value=datetime.date.today(), key="fee_date_input")
+            fee_amount = st.number_input("Amount (£):", min_value=0.0, value=35.0, step=5.0, key="fee_amt_input")
         with f_col3:
-            fee_status = st.selectbox("Payment Status:", ["Paid Up-to-Date", "Outstanding Balance"])
-            fee_notes = st.text_input("Payment Notes:", placeholder="e.g. Bank Transfer / Cash")
+            fee_status = st.selectbox("Payment Status:", ["Paid Up-to-Date", "Outstanding Balance"], key="fee_status_input")
+            fee_notes = st.text_input("Payment Notes:", key="fee_notes_input")
 
         submit_fee = st.form_submit_button("💾 Save Fee Record to Excel")
         if submit_fee:
@@ -1157,7 +1165,6 @@ with tab5:
                     ws_f.append(["ClassGroup", "StudentName", "DueDate", "AmountDue", "PaymentStatus", "Notes"])
                 else:
                     ws_f = wb["Student Fees"]
-
                 updated = False
                 for r_idx, row in enumerate(ws_f.iter_rows(min_row=2, values_only=True), start=2):
                     if str(row[1]).strip().lower() == fee_student.strip().lower():
@@ -1168,49 +1175,14 @@ with tab5:
                         ws_f.cell(row=r_idx, column=6).value = fee_notes
                         updated = True
                         break
-
                 if not updated:
-                    ws_f.append([
-                        fee_class,
-                        fee_student,
-                        fee_date.strftime("%Y-%m-%d"),
-                        fee_amount,
-                        fee_status,
-                        fee_notes
-                    ])
-
+                    ws_f.append([fee_class, fee_student, fee_date.strftime("%Y-%m-%d"), fee_amount, fee_status, fee_notes])
                 wb.save(EXCEL_FILE)
                 st.success(f"Fee record successfully saved for **{fee_student}**!")
                 st.cache_data.clear()
                 st.rerun()
             except Exception as ex:
                 st.error(f"Error saving fee record: {ex}")
-
-    st.divider()
-    st.subheader("🔍 Search & View Fees (By Class or Individual Student)")
-
-    f_search_col1, f_search_col2 = st.columns(2)
-    with f_search_col1:
-        filter_class_fee = st.selectbox("Filter by Class Group:", class_group_options, key="f_class_sel")
-    with f_search_col2:
-        filter_student_fee = st.selectbox("Filter by Individual Student:", ["All Students"] + all_students_list, key="f_stud_sel")
-
-    if not df_fees.empty:
-        disp_fees = df_fees.copy()
-        if filter_class_fee != "All Classes":
-            disp_fees = disp_fees[disp_fees["Class / Group"].str.strip().str.lower() == filter_class_fee.strip().lower()]
-        if filter_student_fee != "All Students":
-            disp_fees = disp_fees[disp_fees["Student Name"].str.strip().str.lower() == filter_student_fee.strip().lower()]
-
-        if not disp_fees.empty:
-            st.dataframe(disp_fees, use_container_width=True, hide_index=True)
-
-            total_outstanding = disp_fees[disp_fees["Payment Status"].str.contains("Outstanding", case=False, na=False)]["AmountDue" if "AmountDue" in disp_fees.columns else "Amount Due (£)"].sum()
-            st.metric("Total Outstanding Balance in View", f"£{total_outstanding:.2f}")
-        else:
-            st.info("No fee records found matching your selected filters.")
-    else:
-        st.info("No fee records saved in Excel yet. Use the form above to record your first student payment or balance.")
 
 # --- TAB 6: COHORT OVERVIEW & FILTERS ---
 with tab6:
@@ -1219,139 +1191,31 @@ with tab6:
     avg_cohort_mark_70 = df_st["Avg Mark (/35)"].mean() * 2 if "Avg Mark (/35)" in df_st.columns else 0
     meeting_target = (df_st["Predicted Grade"] >= df_st["Baseline Grade"]).sum() if "Predicted Grade" in df_st.columns and "Baseline Grade" in df_st.columns else 0
     total_pending_rp = df_st["Outstanding Practicals"].sum() if "Outstanding Practicals" in df_st.columns else 0
-    critical_cases = (
-        df_st["Practical Compliance Flag"]
-        .astype(str)
-        .str.contains("CRITICAL", na=False)
-        .sum() if "Practical Compliance Flag" in df_st.columns else 0
-    )
+    critical_cases = df_st["Practical Compliance Flag"].astype(str).str.contains("CRITICAL", na=False).sum() if "Practical Compliance Flag" in df_st.columns else 0
 
     c1.metric("Cohort Avg Mark (/70)", f"{avg_cohort_mark_70:.1f}")
     c2.metric("Meeting/Exceeding Target", f"{meeting_target} / {len(df_st)}")
     c3.metric("Total Pending Practicals", int(total_pending_rp))
     c4.metric("Critical Risk Students", int(critical_cases))
 
-    st.divider()
-    st.subheader("🔍 Advanced Cohort Intervention Filter")
-
-    f_col1, f_col2 = st.columns(2)
-    with f_col1:
-        tier_filter = st.selectbox(
-            "Filter by Entry Tier:", ["All Tiers", "Higher", "Foundation"], key="tier_f"
-        )
-    with f_col2:
-        risk_filter = st.selectbox(
-            "Filter by Compliance Risk:",
-            ["All Risk Levels", "CRITICAL DEFICIT", "ACTION REQUIRED", "Secure"], key="risk_f"
-        )
-
-    filtered_cohort = df_st.copy()
-    if tier_filter != "All Tiers" and "Tier (H/F)" in filtered_cohort.columns:
-        filtered_cohort = filtered_cohort[
-            filtered_cohort["Tier (H/F)"].astype(str).str.contains(tier_filter, case=False, na=False)
-        ]
-    if risk_filter != "All Risk Levels" and "Practical Compliance Flag" in filtered_cohort.columns:
-        filtered_cohort = filtered_cohort[
-            filtered_cohort["Practical Compliance Flag"].astype(str).str.contains(risk_filter, case=False, na=False)
-        ]
-
-    display_cols = [c for c in ["Student ID", "Student Name", "Tier (H/F)", "Baseline Grade", "Predicted Grade", "Projected Grade", "Practical Compliance Flag", "Focus / Action Priority"] if c in filtered_cohort.columns]
-    st.dataframe(
-        filtered_cohort[display_cols],
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    st.divider()
-    st.subheader("📦 Batch Cohort Report Export")
-    st.info("Download a ZIP archive containing individual text report files for every student in the cohort.")
-
-    if st.button("📥 Generate & Download Cohort ZIP Archive"):
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for _, student in df_st.iterrows():
-                s_name = student["Student Name"]
-                s_avg_70 = float(student.get("Avg Mark (/35)", 0)) * 2 if pd.notna(student.get("Avg Mark (/35)")) else 0.0
-                s_pct = float(student.get("Avg %", 0)) * 100 if pd.notna(student.get("Avg %")) else 0.0
-                _, _, cwg_val, pending_val = compute_student_metrics(student, all_topics, df_gb, df_rp)
-                report_content = f"""====================================================
-GCSE SCIENCE STUDENT PERFORMANCE REPORT
-====================================================
-Student Name: {s_name}
-Student ID:   {student['Student ID']}
-Programme:    {student.get('Study Programme', 'Science')} ({student.get('Exam Board', 'AQA')})
-Tier:         {student.get('Tier (H/F)', 'N/A')}
-
-PERFORMANCE SUMMARY:
-- Current Working Grade (CWG): {safe_int(cwg_val)}
-- Predicted Grade: {safe_int(get_first_valid(student, ['Predicted Grade'], 0))}
-- Average Mock Score: {s_avg_70:.1f} / 70 ({s_pct:.1f}%)
-- Pending Practicals: {safe_int(pending_val)}
-
-ACTION & FOCUS PRIORITY:
-{student.get('Focus / Action Priority', 'N/A')}
-"""
-                zip_file.writestr(f"{s_name}_Report.txt", report_content)
-
-        zip_buffer.seek(0)
-        st.download_button(
-            label="📦 Click Here to Download ZIP File",
-            data=zip_buffer,
-            file_name="All_Student_Science_Reports.zip",
-            mime="application/zip",
-        )
-
 # --- TAB 7: TOPIC HEATMAP & WEAKNESS ANALYSIS ---
 with tab7:
     st.header("Class-Wide Topic Analysis (Scaled to /70 Mock Marks)")
-    subject_choice = st.selectbox(
-        "Select Subject:", ["All Subjects", "Biology", "Chemistry", "Physics"], key="subj_choice"
-    )
-
-    if subject_choice == "Biology":
-        sub_cols = bio_cols
-    elif subject_choice == "Chemistry":
-        sub_cols = chem_cols
-    elif subject_choice == "Physics":
-        sub_cols = phys_cols
-    else:
-        sub_cols = all_topics
-
+    subject_choice = st.selectbox("Select Subject:", ["All Subjects", "Biology", "Chemistry", "Physics"], key="subj_choice_tab7")
+    sub_cols = bio_cols if subject_choice == "Biology" else (chem_cols if subject_choice == "Chemistry" else (phys_cols if subject_choice == "Physics" else all_topics))
     topic_means_70 = df_st[sub_cols].mean().sort_values() * 2
-    st.subheader(f"Cohort Topic Averages (/70) - {subject_choice}")
     st.bar_chart(topic_means_70)
-
-    st.info(
-        f" Lowest scoring module in {subject_choice}: **{topic_means_70.index[0]}** (Avg: {topic_means_70.iloc[0]:.1f}/70)"
-    )
 
 # --- TAB 8: GRADE GAP CALCULATOR ---
 with tab8:
     st.header("Grade Boundary Distance Calculator (Mock Scale /70)")
-
-    student_options = [
-        f"{row['Student Name']} ({row['Student ID']})"
-        for _, row in df_st.iterrows()
-    ]
-    sel_option = st.selectbox(
-        "Select Student for Boundary Gap:", student_options, key="gap_stud_sel"
-    )
-
+    student_options = [f"{row['Student Name']} ({row['Student ID']})" for _, row in df_st.iterrows()]
+    sel_option = st.selectbox("Select Student for Boundary Gap:", student_options, key="gap_stud_sel_tab8")
     sel_student_id = sel_option.split("(")[-1].strip(")")
     s_row = df_st[df_st["Student ID"] == sel_student_id].iloc[0]
-
     calc_70, _, _, _ = compute_student_metrics(s_row, all_topics, df_gb, df_rp)
-    mark_70 = float(calc_70)
-    tier = str(s_row["Tier (H/F)"])
-    curr_g, next_g, gap_70 = get_grade_gap(tier, mark_70)
-
+    curr_g, next_g, gap_70 = get_grade_gap(str(s_row["Tier (H/F)"]), float(calc_70))
     g1, g2, g3 = st.columns(3)
     g1.metric("Current Working Grade", curr_g)
-    g2.metric(
-        "Next Grade Milestone", next_g if next_g else "Max Grade Reached"
-    )
-    g3.metric(
-        "Marks Needed for Next Grade", f"+{gap_70} marks" if next_g else "N/A"
-    )
-
-    st.progress(min(1.0, max(0.0, mark_70 / 70.0)))
+    g2.metric("Next Grade Milestone", next_g if next_g else "Max Grade Reached")
+    g3.metric("Marks Needed for Next Grade", f"+{gap_70} marks" if next_g else "N/A")
